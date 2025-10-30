@@ -314,7 +314,8 @@ Add images to `assets/screens/` and reference them here. Examples:
 ![Clarification](./assets/screens/clarification.png)
 ![Result](./assets/screens/result1.png)
 ![Result](./assets/screens/result2.png)
-![Error](./assets/screens/error.png)
+![Error1](./assets/screens/networkerror.png)
+![Error1](./assets/screens/servererror.png)
 
 You can capture from the simulator/emulator and drop PNGs in that folder. Keep filenames lowercase with no spaces.
 
