@@ -36,54 +36,40 @@ The first utterance responds with `audiofile1.mp3`, and the second utterance res
 
 ### Running the App
 
-#### iOS Simulator (macOS only) - Recommended
+#### Option A: Expo Go (simple, your preferred flow)
 
-**Option 1: Using Expo CLI (requires Expo Go on simulator - may have compatibility issues)**
+1) Start the dev server
 ```bash
-npm run ios
+npm start
 ```
+2) In the terminal UI, ensure Development client is set to Expo Go
+   - If not, press `s` to toggle to Expo Go
+3) Launch on a platform
+   - iOS Simulator: press `i`
+   - Android Emulator: press `a`
 
-**Option 2: Development Build (Recommended for SDK 54) - No Expo Go needed**
+Notes:
+- You may see a harmless warning about expo-av deprecation; this is expected in Expo Go.
+- Make sure your emulator/simulator is running (or a device is connected) before pressing `i`/`a`.
+
+#### Option B: Development Build (no Expo Go)
+
+Use this if you want a native dev client (avoids Expo Go compatibility issues):
+
+- iOS (Simulator):
 ```bash
 npm run ios:simulator
 ```
 
+- Android (Emulator):
+```bash
+npm run android:emulator
+```
+
 This will:
-- Build a native development client for the iOS Simulator
+- Build the native development client
 - Install and launch the app directly
-- No Expo Go compatibility issues
-
-**Note**: Expo SDK 54 is the latest stable version as of October 29, 2025. If you encounter "Project is incompatible with this version of Expo Go" errors, use Option 2 (`npm run ios:simulator`) which builds a native app and doesn't require Expo Go.
-
-#### Android Emulator
-
-**Prerequisites**:
-- Install [Android Studio](https://developer.android.com/studio)
-- During installation, ensure these components are selected:
-  - Android SDK
-  - Android SDK Platform
-  - Android Virtual Device (AVD)
-- Create and start an Android Virtual Device (AVD) in Android Studio
-
-**Option 1: Using Expo CLI (requires Expo Go on emulator - may have compatibility issues)**
-1. Start your Android emulator first
-2. Run:
-   ```bash
-   npm run android
-   ```
-
-**Option 2: Development Build (Recommended for SDK 54) - No Expo Go needed**
-1. Start your Android emulator first
-2. Run:
-   ```bash
-   npm run android:emulator
-   ```
-   This will:
-   - Build a native development client for the Android Emulator
-   - Install and launch the app directly
-   - No Expo Go compatibility issues
-
-**Note**: If you encounter Expo Go compatibility errors, use Option 2 (`npm run android:emulator`) which builds a native app and doesn't require Expo Go.
+- Avoid Expo Go compatibility constraints
 
 #### Physical Device
 
@@ -326,7 +312,8 @@ Add images to `assets/screens/` and reference them here. Examples:
 ![Listening](./assets/screens/listening.png)
 ![Processing](./assets/screens/processing.png)
 ![Clarification](./assets/screens/clarification.png)
-![Result](./assets/screens/result.png)
+![Result](./assets/screens/result1.png)
+![Result](./assets/screens/result2.png)
 ![Error](./assets/screens/error.png)
 
 You can capture from the simulator/emulator and drop PNGs in that folder. Keep filenames lowercase with no spaces.
@@ -335,8 +322,8 @@ You can capture from the simulator/emulator and drop PNGs in that folder. Keep f
 
 Add your 2–3 minute demo video link here:
 
-- Demo video: https://your-video-link-here
-- (Optional) Assignment video instructions: https://your-assignment-video-link-here
+- Demo video: https://drive.google.com/file/d/1cIEPNbys3_cayJ1Wa-99WOhvruLd75fy/view?usp=sharing
+- (Optional) Assignment video guild and instructions: https://www.loom.com/share/b72e9a943e454a5fa19357a665ddc646 and https://doc.clickup.com/9015599350/d/h/8cny87p-69855/bb52a83b03aa3e5/8cny87p-27795
 
 ## Analytics (lightweight)
 

@@ -9,7 +9,8 @@ type StubOptions = {
 export class StubVoiceApi implements VoiceApi {
   private delayMs: number;
   private scenario: NonNullable<StubOptions["scenario"]>;
-  private turnCount = 0;
+  private successCount = 0;
+  private clarifyCount = 0;
 
   constructor(opts?: StubOptions) {
     this.delayMs = opts?.delayMs ?? 1000;
@@ -35,19 +36,16 @@ export class StubVoiceApi implements VoiceApi {
       case "serverError":
         throw { kind: "error", code: "SERVER", message: "Something went wrong. Please try again." } as const;
       case "clarify": {
-        // First turn: ask for clarification, next turn: success
-        if (this.turnCount % 2 === 0) {
-          this.turnCount++;
-          return { kind: "clarification", prompt: "What time should I set it for?" };
-        }
-        this.turnCount++;
-        return { kind: "ok", audioUri: String(audio2), transcript: "Setting it for 7 pm." };
+        // Always acknowledge setting the time to 7 PM; alternate audio files per turn within clarify scenario
+        const useFirst = this.clarifyCount % 2 === 0;
+        this.clarifyCount++;
+        return { kind: "ok", audioUri: String(useFirst ? audio1 : audio2), transcript: "Okay, I will set it for 7 PM." };
       }
       case "success":
       default: {
-        // First utterance -> audio1, second utterance -> audio2, then repeat
-        const useFirst = this.turnCount % 2 === 0;
-        this.turnCount++;
+        // Success scenario alternates audio and transcripts per success turn only
+        const useFirst = this.successCount % 2 === 0;
+        this.successCount++;
         return {
           kind: "ok",
           audioUri: String(useFirst ? audio1 : audio2),

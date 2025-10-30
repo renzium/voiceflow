@@ -1,7 +1,8 @@
 import React from "react";
 import { FlatList, Image, StyleSheet, Text, View } from "react-native";
+import ClarificationBanner from "./ClarificationBanner";
 
-export type TranscriptItem = { id: string; text: string; role: "assistant" | "user" };
+export type TranscriptItem = { id: string; text: string; role: "assistant" | "user" | "clarification" };
 
 export default function TranscriptList({ items }: { items: TranscriptItem[] }) {
   return (
@@ -9,18 +10,39 @@ export default function TranscriptList({ items }: { items: TranscriptItem[] }) {
       data={items}
       keyExtractor={(i) => i.id}
       contentContainerStyle={styles.container}
-      renderItem={({ item }) => (
-        <View style={[styles.row, item.role === 'assistant' ? styles.left : styles.right]}>
-          {item.role === 'assistant' && (
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>AI</Text>
+      renderItem={({ item }) => {
+        if (item.role === 'clarification') {
+          return (
+            <View style={[styles.row, styles.left, { paddingRight: 16 }]}> 
+              <View style={styles.avatar}>
+                <Image source={require('../../assets/icon.png')} style={styles.avatarImg} resizeMode="cover" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ClarificationBanner prompt={item.text} />
+              </View>
             </View>
-          )}
-          <View style={[styles.bubble, item.role === 'assistant' ? styles.bubbleAssist : styles.bubbleUser]}>
-            <Text style={[styles.text, item.role === 'assistant' ? styles.textAssist : styles.textUser]}>{item.text}</Text>
+          );
+        }
+
+        return (
+          <View style={[styles.row, item.role === 'assistant' ? styles.left : styles.right]}>
+            {item.role === 'assistant' && (
+              <View style={styles.avatar}>
+                <Image source={require('../../assets/icon.png')} style={styles.avatarImg} resizeMode="cover" />
+              </View>
+            )}
+            <View
+              style={[
+                styles.bubble,
+                item.role === 'assistant' ? styles.bubbleAssist : styles.bubbleUser,
+                item.role === 'assistant' ? styles.bubbleAssistAlign : styles.bubbleUserAlign,
+              ]}
+            >
+              <Text style={[styles.text, item.role === 'assistant' ? styles.textAssist : styles.textUser]}>{item.text}</Text>
+            </View>
           </View>
-        </View>
-      )}
+        );
+      }}
     />
   );
 }
@@ -34,12 +56,11 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#0ea5e9',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
   },
-  avatarText: { color: 'white', fontSize: 12, fontWeight: '700' },
+  avatarImg: { width: 28, height: 28, borderRadius: 6 },
   bubble: {
     maxWidth: '80%',
     paddingHorizontal: 14,
@@ -48,6 +69,8 @@ const styles = StyleSheet.create({
   },
   bubbleAssist: { backgroundColor: '#f1f5f9', borderTopLeftRadius: 6 },
   bubbleUser: { backgroundColor: '#1d4ed8', borderTopRightRadius: 6 },
+  bubbleAssistAlign: { alignSelf: 'flex-start' },
+  bubbleUserAlign: { alignSelf: 'flex-end' },
   text: { fontSize: 15, lineHeight: 20 },
   textAssist: { color: '#0f172a' },
   textUser: { color: 'white' },
