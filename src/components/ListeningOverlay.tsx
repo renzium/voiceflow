@@ -1,16 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { colors, radius } from "../theme";
 
-type Props = { onCancel: () => void; onStop: () => void; startedAtMs: number };
+type Props = { startedAtMs: number; partial: string; onStop: () => void; onCancel: () => void };
 
-export default function ListeningOverlay({ onCancel, onStop, startedAtMs }: Props) {
+export default function ListeningOverlay({ startedAtMs, partial, onStop, onCancel }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(scale, { toValue: 1.2, duration: 500, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 1.0, duration: 500, useNativeDriver: true }),
-      ])
+        Animated.timing(scale, { toValue: 1.25, duration: 550, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 550, useNativeDriver: true }),
+      ]),
     );
     loop.start();
     return () => loop.stop();
@@ -21,19 +22,24 @@ export default function ListeningOverlay({ onCancel, onStop, startedAtMs }: Prop
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, []);
-  const elapsedSec = Math.max(0, Math.floor((now - startedAtMs) / 1000));
+  const elapsed = Math.max(0, Math.floor((now - startedAtMs) / 1000));
 
   return (
-    <View style={styles.overlay}>
-      <Animated.View style={[styles.pulse, { transform: [{ scale }] }]} />
-      <Text style={styles.title}>Listening…</Text>
-      <Text style={styles.timer}>{elapsedSec}s</Text>
+    <View style={styles.sheet} accessibilityViewIsModal accessibilityLiveRegion="polite">
+      <View style={styles.row}>
+        <Animated.View style={[styles.dot, { transform: [{ scale }] }]} />
+        <Text style={styles.title}>Listening</Text>
+        <Text style={styles.timer}>{elapsed}s</Text>
+      </View>
+      <Text style={[styles.partial, !partial && styles.placeholder]} numberOfLines={4}>
+        {partial || "Try “add eggs and bread” or “what’s on my list?”"}
+      </Text>
       <View style={styles.actions}>
-        <Pressable onPress={onStop} accessibilityLabel="Stop recording" style={[styles.btn, styles.stop]}>
-          <Text style={styles.btnText}>Stop</Text>
+        <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel" style={[styles.btn, styles.cancel]}>
+          <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
-        <Pressable onPress={onCancel} accessibilityLabel="Cancel recording" style={[styles.btn, styles.cancel]}>
-          <Text style={styles.btnText}>Cancel</Text>
+        <Pressable onPress={onStop} accessibilityRole="button" accessibilityLabel="Done speaking" style={[styles.btn, styles.done]}>
+          <Text style={styles.doneText}>Done</Text>
         </Pressable>
       </View>
     </View>
@@ -41,31 +47,28 @@ export default function ListeningOverlay({ onCancel, onStop, startedAtMs }: Prop
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  sheet: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
     padding: 24,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    backgroundColor: "#0f172a",
-    alignItems: "center",
+    paddingBottom: 36,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    backgroundColor: colors.overlay,
+    gap: 16,
   },
-  pulse: {
-    width: 48,
-    height: 48,
-    backgroundColor: "#22d3ee",
-    borderRadius: 999,
-    marginBottom: 12,
-  },
-  title: { color: "white", fontSize: 18, fontWeight: "700" },
-  timer: { color: "#cbd5e1", marginTop: 4 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 12 },
-  btn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
-  btnText: { color: 'white', fontWeight: '700' },
-  stop: { backgroundColor: '#22c55e' },
-  cancel: { backgroundColor: '#ef4444' },
+  row: { flexDirection: "row", alignItems: "center", gap: 10 },
+  dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.listening },
+  title: { color: "#fff", fontSize: 17, fontWeight: "700", flex: 1 },
+  timer: { color: "#94a3b8", fontVariant: ["tabular-nums"] },
+  partial: { color: "#fff", fontSize: 22, lineHeight: 30, fontWeight: "500", minHeight: 60 },
+  placeholder: { color: "#64748b", fontSize: 17 },
+  actions: { flexDirection: "row", gap: 12 },
+  btn: { flex: 1, paddingVertical: 14, borderRadius: radius.pill, alignItems: "center" },
+  cancel: { backgroundColor: "#1e293b" },
+  cancelText: { color: "#cbd5e1", fontWeight: "700" },
+  done: { backgroundColor: "#fff" },
+  doneText: { color: colors.text, fontWeight: "700" },
 });
-
-

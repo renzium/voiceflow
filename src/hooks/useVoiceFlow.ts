@@ -1,163 +1,158 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { audioService } from "../services/AudioService";
-import { StubVoiceApi, createVoiceApi } from "../services/VoiceApi";
-import type { AppState, Scenario } from "../types";
+import { useSpeechRecognitionEvent } from "expo-speech-recognition";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { initialState, toHistory, voiceReducer } from "../core/voiceMachine";
 import { analytics } from "../services/Analytics";
+import { AssistantError, DemoAssistant, createAssistant } from "../services/Assistant";
+import { describeSpeechError, speechInput } from "../services/SpeechInput";
+import { speak, stopSpeaking } from "../services/SpeechOutput";
+import type { Scenario } from "../types";
 
+let seq = 0;
+const nextId = (prefix: string) => `${prefix}_${Date.now()}_${seq++}`;
+
+/**
+ * Orchestrates the voice loop: on-device speech recognition → backend (Claude) →
+ * on-device text-to-speech. All state transitions go through `voiceReducer`;
+ * this hook only wires native events and async side effects to it.
+ */
 export function useVoiceFlow() {
-  const voiceApiRef = useRef<StubVoiceApi>(createVoiceApi());
-  const [scenario, setScenario] = useState<Scenario>("success");
-  const scenarioRef = useRef<Scenario>("success");
-  const [state, setState] = useState<AppState>({ kind: "Idle" });
-  const [transcripts, setTranscripts] = useState<{ id: string; text: string; role: 'assistant' | 'user' | 'clarification' }[]>(
-    []
+  const [state, dispatch] = useReducer(voiceReducer, initialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const assistantRef = useRef(createAssistant());
+  const assistant = assistantRef.current;
+  const [scenario, setScenarioState] = useState<Scenario>("success");
+
+  // Latest recognized text for the current listening session.
+  const transcriptRef = useRef("");
+  // True only while a listening session may still produce an utterance.
+  // Cleared on cancel/error so a trailing native "end" event is ignored.
+  const sessionOpenRef = useRef(false);
+  // Bumped whenever a new turn starts or the conversation resets, so replies
+  // from an abandoned turn are never applied or spoken.
+  const turnRef = useRef(0);
+
+  const setScenario = useCallback(
+    (s: Scenario) => {
+      if (assistant instanceof DemoAssistant) assistant.scenario = s;
+      setScenarioState(s);
+    },
+    [assistant],
   );
-  const recordingStartedAt = useRef<number | null>(null);
-  const activePlayerStop = useRef<null | (() => Promise<void>)>(null);
-  const activeRecording = useRef<null | { stopAndGetUri: () => Promise<string>; cancel: () => Promise<void> }>(null);
-  const isFinishing = useRef(false);
-  const successTurnRef = useRef(0);
 
-  // Keep API scenario in sync
-  const api = voiceApiRef.current;
-  useMemo(() => {
-    api.setScenario(scenario);
-    scenarioRef.current = scenario;
-    // When leaving clarification, remove any trailing clarification card
-    if (scenarioRef.current !== 'clarify') {
-      setTranscripts((prev) => {
-        const last = prev[prev.length - 1];
-        if (last && last.role === 'clarification') {
-          return prev.slice(0, -1);
-        }
-        return prev;
-      });
-    }
-  }, [api, scenario]);
-
-  // (Removed auto-insert on scenario change to avoid duplicates)
-
-  const onPressIn = useCallback(async () => {
-    try {
-      // If in clarification mode, ensure the clarification card is present BEFORE recording
-      if (scenarioRef.current === 'clarify') {
-        setTranscripts((prev) => {
-          const last = prev[prev.length - 1];
-          if (last && last.role === 'clarification') return prev;
-          return [...prev, { id: String(Date.now()) + '_pre_c', text: 'What time should I set it for?', role: 'clarification' }];
+  const respond = useCallback(
+    async (utterance: string) => {
+      const snapshot = stateRef.current;
+      const turn = turnRef.current;
+      try {
+        const response = await assistant.converse({
+          history: toHistory(snapshot),
+          utterance,
+          list: snapshot.list,
         });
+        if (turn !== turnRef.current) return;
+        analytics.log("assistant_reply", { type: response.type, ops: response.operations.length });
+        dispatch({ type: "REPLY", response, id: nextId("a") });
+        analytics.log("speech_started");
+        await speak(response.reply);
+        if (turn !== turnRef.current) return;
+        analytics.log("speech_finished");
+        dispatch({ type: "SPEAK_DONE" });
+      } catch (e) {
+        if (turn !== turnRef.current) return;
+        const message =
+          e instanceof AssistantError ? e.message : "Something went wrong. Please try again.";
+        analytics.log("error", { where: "converse", code: e instanceof AssistantError ? e.code : "UNKNOWN" });
+        dispatch({ type: "FAIL", message });
       }
-      const session = await audioService.startRecording();
-      activeRecording.current = session;
-      recordingStartedAt.current = Date.now();
-      analytics.log('recording_started');
-      setState({ kind: "Listening", startedAtMs: Date.now() });
-    } catch (e: any) {
-      analytics.log('error', { where: 'startRecording', message: e?.message });
-      setState({ kind: "Error", message: e?.message || "Microphone permission denied." });
+    },
+    [assistant],
+  );
+
+  useSpeechRecognitionEvent("result", (event) => {
+    const text = event.results[0]?.transcript ?? "";
+    transcriptRef.current = text;
+    dispatch({ type: "PARTIAL", text });
+  });
+
+  useSpeechRecognitionEvent("end", () => {
+    if (!sessionOpenRef.current) return;
+    sessionOpenRef.current = false;
+    const text = transcriptRef.current.trim();
+    analytics.log("listen_finished", { chars: text.length });
+    // Read state before dispatching: history must not include this utterance yet.
+    if (text) void respond(text);
+    dispatch({ type: "LISTEN_END", text, id: nextId("u") });
+  });
+
+  useSpeechRecognitionEvent("error", (event) => {
+    const message = describeSpeechError(event.error);
+    analytics.log("error", { where: "recognizer", code: event.error });
+    if (!sessionOpenRef.current) return;
+    sessionOpenRef.current = false;
+    if (message) dispatch({ type: "FAIL", message });
+    else dispatch({ type: "CANCEL" });
+  });
+
+  const startListening = useCallback(async () => {
+    const { phase } = stateRef.current;
+    if (phase.kind === "Listening" || phase.kind === "Thinking") return;
+    turnRef.current += 1;
+    if (phase.kind === "Speaking") {
+      // Barge-in: tapping the mic while the assistant talks interrupts it.
+      stopSpeaking();
+      dispatch({ type: "SPEAK_DONE" });
     }
+    if (phase.kind === "Error") dispatch({ type: "DISMISS" });
+
+    if (!(await speechInput.ensurePermission())) {
+      dispatch({ type: "LISTEN_START", now: Date.now() });
+      dispatch({ type: "FAIL", message: describeSpeechError("not-allowed")! });
+      return;
+    }
+    transcriptRef.current = "";
+    sessionOpenRef.current = true;
+    dispatch({ type: "LISTEN_START", now: Date.now() });
+    analytics.log("listen_started");
+    speechInput.start();
   }, []);
 
-  const onCancel = useCallback(async () => {
-    try {
-      await activeRecording.current?.cancel();
-    } finally {
-      activeRecording.current = null;
-      recordingStartedAt.current = null;
-      setState({ kind: "Idle" });
-    }
+  const stopListening = useCallback(() => {
+    speechInput.stop();
   }, []);
 
-  const finishRecording = useCallback(async () => {
-    if (isFinishing.current) return;
-    isFinishing.current = true;
-    if (!activeRecording.current) return;
-    setState({ kind: "Processing" });
-    try {
-      const uri = await activeRecording.current.stopAndGetUri();
-      analytics.log('recording_stopped', { uri });
-      activeRecording.current = null;
+  const cancelListening = useCallback(() => {
+    sessionOpenRef.current = false;
+    speechInput.abort();
+    analytics.log("listen_cancelled");
+    dispatch({ type: "CANCEL" });
+  }, []);
 
-      // Add a user-side bubble to simulate STT transcript (chat-like UX)
-      let userText: string;
-      if (scenarioRef.current === 'clarify') {
-        userText = 'Please set it for 7 PM.';
-      } else {
-        const turn = successTurnRef.current++;
-        userText = turn % 2 === 0
-          ? 'Hey, can you help me create a to-do list?'
-          : 'Ok, can you help me with something else';
-      }
-      setTranscripts((prev) => [...prev, { id: String(Date.now()) + '_u', text: userText, role: 'user' }]);
+  const dismissError = useCallback(() => dispatch({ type: "DISMISS" }), []);
 
-      const res = await api.processVoice({
-        audioUri: uri,
-        mimeType: "audio/m4a",
-        clientTs: new Date().toISOString(),
-      });
-
-      // In clarify scenario, after assistant responds, queue another clarification prompt inline
-
-      // Play audio response
-      setState({ kind: "Playing", uri: res.audioUri });
-      analytics.log('api_result', { kind: 'ok' });
-      analytics.log('playback_started');
-      const player = await audioService.playAudio(res.audioUri);
-      activePlayerStop.current = player.stop;
-
-      // Update transcript list
-      if (res.transcript) {
-        setTranscripts((prev) => [...prev, { id: String(Date.now()), text: res.transcript!, role: 'assistant' }]);
-      }
-
-      // Wait until playback naturally finishes – we cannot easily know, so auto-return to Idle after a delay
-      // A simple heuristic: 3.5s per response file
-      setTimeout(async () => {
-        try {
-          await activePlayerStop.current?.();
-        } catch {}
-        analytics.log('playback_finished');
-        setState({ kind: "Idle" });
-        activePlayerStop.current = null;
-        if (scenarioRef.current === 'clarify') {
-          // Append next clarification prompt only if the last item is NOT already a clarification
-          setTranscripts((prev) => {
-            const last = prev[prev.length - 1];
-            if (last && last.role === 'clarification') return prev;
-            return [...prev, { id: String(Date.now()) + '_next_c', text: 'What time should I set it for?', role: 'clarification' }];
-          });
-        }
-      }, 3500);
-    } catch (e: any) {
-      let msg = "Something went wrong. Please try again.";
-      const code = e?.code as string | undefined;
-      if (code === 'NETWORK') {
-        msg = e?.message || 'Network error. Please check your connection and try again.';
-      } else if (code === 'SERVER') {
-        msg = e?.message || 'Server error. Please try again in a moment.';
-      } else if (typeof e?.message === 'string') {
-        msg = e.message;
-      }
-      analytics.log('error', { where: 'finishRecording', code, message: msg });
-      setState({ kind: "Error", message: msg });
-    } finally {
-      isFinishing.current = false;
+  const reset = useCallback(() => {
+    turnRef.current += 1;
+    if (sessionOpenRef.current) {
+      sessionOpenRef.current = false;
+      speechInput.abort();
     }
-  }, [api]);
+    stopSpeaking();
+    dispatch({ type: "RESET" });
+  }, []);
 
-  const onPressOut = finishRecording;
-  const onStop = finishRecording;
+  // Stop any speech if the screen unmounts mid-sentence.
+  useEffect(() => () => stopSpeaking(), []);
 
   return {
     state,
+    mode: assistant.mode,
     scenario,
     setScenario,
-    transcripts,
-    onPressIn,
-    onPressOut,
-    onCancel,
-    onStop,
+    startListening,
+    stopListening,
+    cancelListening,
+    dismissError,
+    reset,
   };
 }
-
-

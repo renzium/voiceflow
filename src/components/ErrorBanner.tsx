@@ -1,25 +1,31 @@
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { colors, radius } from "../theme";
 
-export default function ErrorBanner({ message }: { message: string }) {
+export default function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>Something went wrong</Text>
+    <View style={styles.container} accessibilityRole="alert">
+      <Ionicons name="alert-circle" size={20} color={colors.errorText} />
       <Text style={styles.message}>{message}</Text>
+      <Pressable onPress={onDismiss} hitSlop={12} accessibilityRole="button" accessibilityLabel="Dismiss error">
+        <Ionicons name="close" size={18} color={colors.errorText} />
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#fee2e2",
-    borderColor: "#ef4444",
+    marginHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.errorBg,
+    borderColor: colors.errorBorder,
     borderWidth: 1,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: radius.md,
   },
-  label: { color: "#7f1d1d", fontWeight: "700", marginBottom: 4 },
-  message: { color: "#7f1d1d" },
+  message: { flex: 1, color: colors.errorText },
 });
-
-

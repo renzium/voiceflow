@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "voiceflow",
+    "name": "VoiceFlow",
     "slug": "voiceflow",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,7 +15,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice messages."
+        "NSMicrophoneUsageDescription": "VoiceFlow uses the microphone so you can talk to your assistant.",
+        "NSSpeechRecognitionUsageDescription": "VoiceFlow turns your speech into text on your device to understand requests."
       },
       "bundleIdentifier": "com.renzium.voiceflow"
     },
@@ -27,13 +28,25 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.RECORD_AUDIO",
         "android.permission.RECORD_AUDIO"
       ],
       "package": "com.renzium.voiceflow"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "VoiceFlow uses the microphone so you can talk to your assistant.",
+          "speechRecognitionPermission": "VoiceFlow turns your speech into text on your device to understand requests.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ],
+      "expo-font"
+    ]
   }
 }
